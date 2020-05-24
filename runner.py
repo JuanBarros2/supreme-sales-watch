@@ -3,10 +3,16 @@ import time
 import json
 from datetime import datetime
 import matplotlib.pyplot
+from functools import reduce
+import pandas as pd
 
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
 SCRAPY_FILE = 'scrap_file.json'
+PROMO_FILE = 'promo_file.csv'
+
+promos_history = {}
+promos_info = {}
 
 
 def set_time(data):
@@ -23,11 +29,8 @@ def set_time(data):
 def dictfy_promos(data):
     new_dict = {}
     for promo in data:
-        new_dict[promo['id']] = {'time': promo['time'], 'temp': promo['temp']}
+        new_dict[promo['id']] = promo
     return new_dict
-
-
-promos_history = {}
 
 
 def add_promo_change(data):
@@ -35,16 +38,18 @@ def add_promo_change(data):
     altered = {}
     for (k, v) in data.items():
         if k not in promos_history:
-            promos_history[k] = [v]
-            appended[k] = k
+            promos_history[k] = [{'time': v['time'], 'temp': v['temp']}]
+            promos_info[k] = v
+            appended[k] = v
         elif promos_history[k][-1]['temp'] != v['temp']:
-            promos_history[k].append(v)
+            promos_history[k].append({'time': v['time'], 'temp': v['temp']})
             altered[k] = v
     return appended, altered
 
+
 try:
     count = 0
-    while count < 30:
+    while count < 2:
         open(SCRAPY_FILE, 'w').close()
 
         os.system('scrapy runspider scraper.py -o ' + SCRAPY_FILE)
@@ -52,15 +57,15 @@ try:
             data = json.load(json_file)
             aux = dictfy_promos(set_time(data))
             appended, altered = add_promo_change(aux)
-            print("Foram adicionados: " + str(len(appended.keys())) + " promoções")
+            print("Foram adicionados: " +
+                  str(len(appended.keys())) + " promoções")
             print("Foram alteradas: " + str(len(altered.keys())) + " promoções")
+
         time.sleep(10)
         count += 1
-    more = list(promos_history.values())[0]
-    time = list(map(lambda x: x['time'], more))
-    temp = list(map(lambda x: x['temp'], more))
-    print(time, temp)
-    matplotlib.pyplot.plot(time, temp)
-    matplotlib.pyplot.show()
+    df = pd.DataFrame(data={key: [value[key] for value in list(promos_info.values(
+    ))] for key in list(promos_info.values())[0].keys()})
+    df.to_csv(PROMO_FILE, index=False)
+
 except SystemExit:
     pass
